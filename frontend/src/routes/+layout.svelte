@@ -510,8 +510,7 @@
 	header {
 		background: var(--bg-secondary);
 		border-bottom: 1px solid var(--border);
-		padding: 1rem 2rem;
-		padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+		padding: calc(1rem + env(safe-area-inset-top, 0px)) calc(2rem + env(safe-area-inset-right, 0px)) 1rem calc(2rem + env(safe-area-inset-left, 0px));
 		position: sticky;
 		top: 0;
 		z-index: 100;
@@ -667,7 +666,7 @@
 
 	@media (max-width: 768px) {
 		header {
-			padding: 0.75rem 1rem;
+			padding: calc(0.75rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) 0.75rem calc(1rem + env(safe-area-inset-left, 0px));
 		}
 
 		nav {
