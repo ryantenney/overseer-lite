@@ -223,6 +223,27 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 3600  # 1 hour max
   }
 
+  # Autocomplete index - served from S3 (JSON files written by autocomplete_warmer Lambda)
+  ordered_cache_behavior {
+    path_pattern           = "/autocomplete-*.json"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "s3-trending"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 86400  # 24 hours (refreshed weekly, but a daily cache window is safer)
+    max_ttl     = 86400
+  }
+
   # API behavior (other endpoints - no caching)
   ordered_cache_behavior {
     path_pattern           = "/api/*"

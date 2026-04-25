@@ -147,6 +147,22 @@ export async function getTrending(mediaType = 'all') {
 	return response.json();
 }
 
+export async function getAutocompleteIndex(locale = 'en') {
+	// Autocomplete index is a static JSON file served from S3 via CloudFront,
+	// refreshed weekly by the autocomplete_warmer Lambda.
+	// Currently English-only; non-English locales fall back to en.
+	const supportedLocales = ['en'];
+	const effectiveLocale = supportedLocales.includes(locale) ? locale : 'en';
+
+	const response = await fetch(`/autocomplete-${effectiveLocale}.json`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch autocomplete index: ${response.status}`);
+	}
+
+	return response.json();
+}
+
 export async function getRequests(mediaType = null) {
 	const url = mediaType ? `/requests?media_type=${mediaType}` : '/requests';
 	return request(url);

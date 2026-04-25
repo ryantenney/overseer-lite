@@ -276,3 +276,72 @@ resource "aws_lambda_permission" "cache_warmer_eventbridge" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.trending_cache_warmer.arn
 }
+
+
+# =============================================================================
+# EventBridge Rule for Search Autocomplete Index
+# Fetches popularity-ranked discover pages from TMDB and writes a static
+# autocomplete index to S3. Refreshed weekly - the popular set changes slowly.
+# =============================================================================
+
+resource "aws_cloudwatch_event_rule" "autocomplete_warmer" {
+  name                = "${local.name_prefix}-autocomplete-warmer"
+  description         = "Build search autocomplete index from TMDB and write to S3"
+  schedule_expression = "rate(7 days)"
+
+  tags = {
+    Name = "${local.name_prefix}-autocomplete-warmer"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "autocomplete_warmer" {
+  rule      = aws_cloudwatch_event_rule.autocomplete_warmer.name
+  target_id = "AutocompleteWarmer"
+  arn       = aws_lambda_function.autocomplete_warmer.arn
+}
+
+# Separate lightweight Lambda for the autocomplete index
+# Walks /discover/{movie,tv}?sort_by=popularity.desc and writes the result
+# to the trending S3 bucket as autocomplete-<locale>.json
+resource "aws_lambda_function" "autocomplete_warmer" {
+  function_name = "${local.name_prefix}-autocomplete-warmer"
+  role          = aws_iam_role.lambda.arn
+  handler       = "autocomplete_warmer.handler"
+  runtime       = "python3.12"
+  architectures = ["arm64"]
+  timeout       = 300  # ~250 pages per media type per locale; sequential fetches
+  memory_size   = 256
+
+  # Placeholder - will be updated by CI/CD
+  filename         = data.archive_file.lambda_placeholder.output_path
+  source_code_hash = data.archive_file.lambda_placeholder.output_base64sha256
+
+  environment {
+    variables = {
+      APP_SECRET_ARN           = aws_secretsmanager_secret.app_config.arn
+      AWS_REGION_NAME          = var.aws_region
+      TRENDING_S3_BUCKET       = aws_s3_bucket.trending.id
+      AUTOCOMPLETE_LOCALES     = "en"
+      AUTOCOMPLETE_TARGET_SIZE = "5000"
+    }
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-autocomplete-warmer"
+  }
+}
+
+# CloudWatch Log Group for autocomplete warmer
+resource "aws_cloudwatch_log_group" "autocomplete_warmer" {
+  name              = "/aws/lambda/${aws_lambda_function.autocomplete_warmer.function_name}"
+  retention_in_days = 7
+}
+
+# Allow EventBridge to invoke the autocomplete warmer Lambda
+resource "aws_lambda_permission" "autocomplete_warmer_eventbridge" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.autocomplete_warmer.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.autocomplete_warmer.arn
+}

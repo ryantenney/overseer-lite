@@ -14,6 +14,8 @@
 	} from '$lib/stores.js';
 	import { verifyPassword, search, getTrending, addRequest, getLibraryStatus, warmup } from '$lib/api.js';
 	import { lazyload } from '$lib/lazyload.js';
+	import { loadIndex, searchIndex } from '$lib/autocomplete.js';
+	import SearchSuggestions from '$lib/components/SearchSuggestions.svelte';
 
 	let password = '';
 	let userName = '';
@@ -23,6 +25,13 @@
 	let mediaFilter = 'all';
 	let searchTimeout = null;
 	let trendingLoaded = false;
+
+	// Autocomplete suggestions
+	let fuseInstance = null;
+	let suggestions = [];
+	let activeIndex = -1;
+	let suggestionsOpen = false;
+	let indexLoadPromise = null;
 
 	// Pagination - target ~20-24 items per page
 	let currentPage = 1;
@@ -204,6 +213,96 @@
 		}, 500);
 	}
 
+	function ensureIndexLoaded() {
+		if (fuseInstance || indexLoadPromise) return indexLoadPromise;
+		const locale = (typeof localStorage !== 'undefined' && localStorage.getItem('locale'))
+			|| (navigator.language || 'en').split('-')[0]
+			|| 'en';
+		indexLoadPromise = loadIndex(locale)
+			.then((fuse) => {
+				fuseInstance = fuse;
+				updateSuggestions();
+				return fuse;
+			})
+			.catch((err) => {
+				console.warn('Autocomplete index unavailable:', err);
+				return null;
+			});
+		return indexLoadPromise;
+	}
+
+	function updateSuggestions() {
+		if (!fuseInstance) {
+			suggestions = [];
+			return;
+		}
+		const filter = mediaFilter === 'all' ? null : mediaFilter;
+		suggestions = searchIndex(fuseInstance, searchQuery, { limit: 8, mediaType: filter });
+		activeIndex = suggestions.length > 0 ? 0 : -1;
+	}
+
+	function handleSearchInput() {
+		updateSuggestions();
+		suggestionsOpen = true;
+		debounceSearch();
+	}
+
+	function handleSearchFocus() {
+		ensureIndexLoaded();
+		if (searchQuery.trim()) {
+			updateSuggestions();
+			suggestionsOpen = true;
+		}
+	}
+
+	function handleSearchBlur() {
+		// Slight delay so mousedown on a suggestion fires before we close.
+		setTimeout(() => {
+			suggestionsOpen = false;
+		}, 120);
+	}
+
+	function pickSuggestion(item) {
+		if (!item) return;
+		searchQuery = item.title;
+		suggestions = [];
+		activeIndex = -1;
+		suggestionsOpen = false;
+		if (searchTimeout) {
+			clearTimeout(searchTimeout);
+			searchTimeout = null;
+		}
+		handleSearch();
+	}
+
+	function handleSearchKeydown(e) {
+		if (suggestionsOpen && suggestions.length > 0) {
+			if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				activeIndex = (activeIndex + 1) % suggestions.length;
+				return;
+			}
+			if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				activeIndex = activeIndex <= 0 ? suggestions.length - 1 : activeIndex - 1;
+				return;
+			}
+			if (e.key === 'Enter' && activeIndex >= 0) {
+				e.preventDefault();
+				pickSuggestion(suggestions[activeIndex]);
+				e.target.blur();
+				return;
+			}
+			if (e.key === 'Escape') {
+				suggestionsOpen = false;
+				return;
+			}
+		}
+		if (e.key === 'Enter') {
+			e.target.blur();
+		}
+	}
+
 	async function handleRequest(item) {
 		try {
 			// Optimistic update - add to store immediately
@@ -236,6 +335,11 @@
 	$: if (searchQuery || mediaFilter) {
 		currentPage = 1;
 		visibleCount = targetItemsPerPage;
+	}
+
+	// Refresh autocomplete suggestions when the media filter changes
+	$: if (fuseInstance && mediaFilter) {
+		updateSuggestions();
 	}
 </script>
 
@@ -270,18 +374,33 @@
 				<input
 					type="search"
 					bind:value={searchQuery}
-					on:input={debounceSearch}
-					on:keydown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+					on:input={handleSearchInput}
+					on:focus={handleSearchFocus}
+					on:blur={handleSearchBlur}
+					on:keydown={handleSearchKeydown}
+					autocomplete="off"
 					enterkeyhint="search"
 					placeholder={$_('search.placeholder')}
 				/>
 				{#if searchQuery}
 					<button
 						class="clear-btn"
-						on:click={() => { searchQuery = ''; searchResults = []; }}
+						on:click={() => {
+							searchQuery = '';
+							searchResults = [];
+							suggestions = [];
+							suggestionsOpen = false;
+						}}
 						aria-label={$_('search.clearSearch')}
 					>×</button>
 				{/if}
+				<SearchSuggestions
+					{suggestions}
+					{activeIndex}
+					visible={suggestionsOpen}
+					on:select={(e) => pickSuggestion(e.detail)}
+					on:hover={(e) => (activeIndex = e.detail)}
+				/>
 			</div>
 			<div class="filter-buttons">
 				<button
