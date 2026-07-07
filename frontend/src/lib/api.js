@@ -128,16 +128,16 @@ export async function search(query, mediaType = null, page = 1) {
 	});
 }
 
-export async function getTrending(mediaType = 'all') {
-	// Trending data is served as static JSON files from S3 via CloudFront
-	// No authentication required - this is public TMDB data
-	// Files are locale-specific: trending-all-en.json, trending-movie-fr.json, etc.
+// Discovery feeds (trending, upcoming) are served as static JSON files from
+// S3 via CloudFront. No authentication required - this is public TMDB data.
+// Files are locale-specific: trending-all-en.json, upcoming-movie-fr.json, etc.
+async function getDiscoveryFeed(feed, mediaType = 'all') {
 	const locale = localStorage.getItem('locale') || navigator.language.split('-')[0] || 'en';
 	// Fallback to 'en' if locale not in supported list
 	const supportedLocales = ['en', 'es', 'fr', 'de'];
 	const effectiveLocale = supportedLocales.includes(locale) ? locale : 'en';
 
-	const response = await fetch(`/trending-${mediaType}-${effectiveLocale}.json`);
+	const response = await fetch(`/${feed}-${mediaType}-${effectiveLocale}.json`);
 
 	if (!response.ok) {
 		const error = await response.json().catch(() => ({ detail: 'Request failed' }));
@@ -145,6 +145,14 @@ export async function getTrending(mediaType = 'all') {
 	}
 
 	return response.json();
+}
+
+export async function getTrending(mediaType = 'all') {
+	return getDiscoveryFeed('trending', mediaType);
+}
+
+export async function getUpcoming(mediaType = 'all') {
+	return getDiscoveryFeed('upcoming', mediaType);
 }
 
 export async function getRequests(mediaType = null) {

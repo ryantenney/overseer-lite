@@ -12,7 +12,7 @@
 		updateLibraryStatus,
 		addToRequestsOptimistic
 	} from '$lib/stores.js';
-	import { verifyPassword, search, getTrending, addRequest, getLibraryStatus, warmup } from '$lib/api.js';
+	import { verifyPassword, search, getTrending, getUpcoming, addRequest, getLibraryStatus, warmup } from '$lib/api.js';
 	import { lazyload } from '$lib/lazyload.js';
 
 	let password = '';
@@ -21,6 +21,7 @@
 	let searchResults = [];
 	let trendingResults = [];
 	let mediaFilter = 'all';
+	let discoveryMode = 'trending'; // 'trending' or 'upcoming'
 	let searchTimeout = null;
 	let trendingLoaded = false;
 
@@ -162,17 +163,25 @@
 
 	async function loadTrending() {
 		try {
-			const data = await getTrending(mediaFilter === 'all' ? 'all' : mediaFilter);
+			const mediaType = mediaFilter === 'all' ? 'all' : mediaFilter;
+			const fetchFeed = discoveryMode === 'upcoming' ? getUpcoming : getTrending;
+			const data = await fetchFeed(mediaType);
 			// Store raw results - hydration happens reactively
 			trendingResults = data.results;
 			if (data.results.length > 0) {
 				trendingLoaded = true;
 			}
 		} catch (error) {
-			console.error('Failed to load trending:', error);
-			// If trending fails (e.g., no key yet), show empty
+			console.error(`Failed to load ${discoveryMode}:`, error);
+			// If the feed fails (e.g., not warmed yet), show empty
 			trendingResults = [];
 		}
+	}
+
+	function setDiscoveryMode(mode) {
+		if (discoveryMode === mode) return;
+		discoveryMode = mode;
+		loadTrending();
 	}
 
 	async function handleSearch() {
@@ -230,7 +239,11 @@
 	}
 
 	$: displayResults = searchQuery.trim() ? hydratedSearch : hydratedTrending;
-	$: sectionTitle = searchQuery.trim() ? $_('search.results') : $_('search.trending');
+	$: sectionTitle = searchQuery.trim()
+		? $_('search.results')
+		: discoveryMode === 'upcoming'
+			? $_('search.upcoming')
+			: $_('search.trending');
 
 	// Reset page/scroll when search/filter changes
 	$: if (searchQuery || mediaFilter) {
@@ -303,6 +316,22 @@
 					{$_('filters.tvShows')}
 				</button>
 			</div>
+			{#if !searchQuery.trim()}
+				<div class="filter-buttons discovery-toggle">
+					<button
+						class:active={discoveryMode === 'trending'}
+						on:click={() => setDiscoveryMode('trending')}
+					>
+						{$_('search.trending')}
+					</button>
+					<button
+						class:active={discoveryMode === 'upcoming'}
+						on:click={() => setDiscoveryMode('upcoming')}
+					>
+						{$_('search.upcoming')}
+					</button>
+				</div>
+			{/if}
 		</div>
 	</div>
 
