@@ -316,27 +316,34 @@
 					{$_('filters.tvShows')}
 				</button>
 			</div>
-			{#if !searchQuery.trim()}
-				<div class="filter-buttons discovery-toggle">
-					<button
-						class:active={discoveryMode === 'trending'}
-						on:click={() => setDiscoveryMode('trending')}
-					>
-						{$_('search.trending')}
-					</button>
-					<button
-						class:active={discoveryMode === 'upcoming'}
-						on:click={() => setDiscoveryMode('upcoming')}
-					>
-						{$_('search.upcoming')}
-					</button>
-				</div>
-			{/if}
 		</div>
 	</div>
 
 	<section class="results-section">
-		<h2>{sectionTitle}</h2>
+		{#if searchQuery.trim()}
+			<h2>{sectionTitle}</h2>
+		{:else}
+			<div class="section-tabs" role="tablist">
+				<button
+					class="section-tab"
+					class:active={discoveryMode === 'trending'}
+					role="tab"
+					aria-selected={discoveryMode === 'trending'}
+					on:click={() => setDiscoveryMode('trending')}
+				>
+					{$_('search.trending')}
+				</button>
+				<button
+					class="section-tab"
+					class:active={discoveryMode === 'upcoming'}
+					role="tab"
+					aria-selected={discoveryMode === 'upcoming'}
+					on:click={() => setDiscoveryMode('upcoming')}
+				>
+					{$_('search.upcoming')}
+				</button>
+			</div>
+		{/if}
 		<div class="grid-wrapper" bind:this={gridContainer}>
 		{#if $loading}
 			<div class="loading">{$_('search.loading')}</div>
@@ -588,6 +595,36 @@
 	.results-section h2 {
 		margin-bottom: 1.5rem;
 		color: var(--text-primary);
+	}
+
+	/* Discovery switch rendered as the section heading itself, so it adds
+	   no extra chrome to the view. Inactive mode reads as a muted heading. */
+	.section-tabs {
+		display: flex;
+		gap: 1.5rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.section-tab {
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		font-size: 1.5rem;
+		font-weight: bold;
+		line-height: 1.2;
+		color: var(--text-secondary);
+		opacity: 0.45;
+		transition: opacity 0.2s, color 0.2s;
+	}
+
+	.section-tab:hover {
+		opacity: 0.8;
+	}
+
+	.section-tab.active {
+		color: var(--text-primary);
+		opacity: 1;
 	}
 
 	.loading, .no-results {
